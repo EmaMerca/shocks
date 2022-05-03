@@ -24,6 +24,12 @@ cp ubuntu/libstable.so osx-intel/libstable.so
 sudo ln /usr/lib/x86_64-linux-gnu/libgsl.so.25 /usr/lib/x86_64-linux-gnu/libgsl.so.23 # libgsl.so.23 is required but .so.25 is the current version
 ```
 
+Install aws CLI
+```bash
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+sudo ./aws/install
+```
 
 ## Usage
 activate the virtual env  first `cd shocks && poetry shell` 
