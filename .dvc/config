@@ -3,4 +3,4 @@
 ['remote "data/binance"']
     url = s3://stock-shocks/binance
 ['remote "data"']
-    url = s3://stock-shocks/data
+    url = s3://shocks/data

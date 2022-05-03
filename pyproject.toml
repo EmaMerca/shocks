@@ -13,7 +13,7 @@ pystable = "^0.2.3"
 ipykernel = "^6.13.0"
 requests = "^2.27.1"
 beautifulsoup4 = "^4.11.1"
-dvc = "^2.10.2"
+dvc = {extras = ["s3"], version = "^2.10.2"}
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
