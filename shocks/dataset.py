@@ -97,8 +97,9 @@ class Dataset(object):
     ):
         df = Dataset.filter_data(self.data, start_date, end_date)
         # find dates where returns distribution is more than std_from_mean away from mean
-        threshold = df["returns"].mean() + std_from_mean * df["returns"].std()
-        shock_dates = df["returns"][(df["returns"].apply(abs) >= threshold)]
+        upper_threshold = df["returns"].mean() + std_from_mean * df["returns"].std()
+        lower_threshold = df["returns"].mean() - std_from_mean * df["returns"].std()
+        shock_dates = df["returns"][(df["returns"] <= lower_threshold) | (df["returns"] >= upper_threshold)]
 
         # shocks is just a list of dates, we need to extract the individual shocks from there
         shocks = []
