@@ -8,11 +8,11 @@ authors = ["EmaMerca <mercanti.emanuele.96@gmail.com>"]
 python = "^3.10"
 numpy = "^1.22.3"
 pandas = "^1.4.2"
-beautifulsoup4 = "^4.11.1"
 matplotlib = "^3.5.1"
 pystable = "^0.2.3"
 ipykernel = "^6.13.0"
 requests = "^2.27.1"
+beautifulsoup4 = "^4.11.1"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
