@@ -17,11 +17,13 @@ import inspect
 inspect.getfile(pystable) # get pystable path
 ```
 
+Change line 23 in `pystable.utils.py` to `elif "2.33" in platform_id or "2.35" in platform_id:`
+then to get the last gsl version run `sudo find / -name "libgsl.so.*"`
 ```bash
-cd pystable_path
-rm /osx-intel/libstable.so
-cp ubuntu/libstable.so osx-intel/libstable.so
-sudo ln /usr/lib/x86_64-linux-gnu/libgsl.so.25 /usr/lib/x86_64-linux-gnu/libgsl.so.23 # libgsl.so.23 is required but .so.25 is the current version
+cd pystable_path/_extensions
+rm /osx-intel/libstable.so # or /macOS/i386/libstable.so
+cp ubuntu/libstable.so osx-intel/libstable.so # or /macOS/i386
+sudo ln /usr/lib/x86_64-linux-gnu/libgsl.so.27 /usr/lib/x86_64-linux-gnu/libgsl.so.25 # libgsl.so.23 is required but .so.your version is the current version
 ```
 
 Install aws CLI
