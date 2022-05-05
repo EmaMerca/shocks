@@ -208,7 +208,6 @@ class Dataset(object):
 
     def build_dataset(self, shocks_window=1000, fit_window=250, std_from_mean=3.5):
         def total_pct_change(values):
-            values = values.dropna()
             return (values[-1] - values[0]) / values[0]
         # 1. detect shocks for all data
         for start in range(len(self.data) - shocks_window):
@@ -258,10 +257,10 @@ class Dataset(object):
             "alpha_pct_change_50_mean": self.fitted.iloc[shock_index - 50 - 1 : shock_index]["alpha"].mean(),
             "alpha_pct_change_50_std": self.fitted.iloc[shock_index - 50 - 1 : shock_index]["alpha"].std(),
             # 
-            "alpha_tot_change_5":  total_pct_change(self.fitted.iloc[shock_index - 5 - 1 : shock_index]["alpha"].values),
-            "alpha_tot_change_10": total_pct_change(self.fitted.iloc[shock_index - 10 - 1 : shock_index]["alpha"].values),
-            "alpha_tot_change_25": total_pct_change(self.fitted.iloc[shock_index - 25 - 1 : shock_index]["alpha"].values),
-            "alpha_tot_change_50": total_pct_change(self.fitted.iloc[shock_index - 50 - 1 : shock_index]["alpha"].values),
+            "alpha_tot_change_5":  total_pct_change(self.fitted.iloc[shock_index - 5 - 1 : shock_index]["alpha"].dropna().values),
+            "alpha_tot_change_10": total_pct_change(self.fitted.iloc[shock_index - 10 - 1 : shock_index]["alpha"].dropna().values),
+            "alpha_tot_change_25": total_pct_change(self.fitted.iloc[shock_index - 25 - 1 : shock_index]["alpha"].dropna().values),
+            "alpha_tot_change_50": total_pct_change(self.fitted.iloc[shock_index - 50 - 1 : shock_index]["alpha"].dropna().values),
             #
             #
             "beta_5_mean": self.fitted.iloc[shock_index - 5 - 1: shock_index]["beta"].mean(),
@@ -282,10 +281,10 @@ class Dataset(object):
             "beta_pct_change_50_mean": self.fitted.iloc[shock_index - 50 - 1: shock_index]["beta"].mean(),
             "beta_pct_change_50_std": self.fitted.iloc[shock_index - 50 - 1: shock_index]["beta"].std(),
             #
-            "beta_tot_change_5": total_pct_change(self.fitted.iloc[shock_index - 5 - 1: shock_index]["beta"].values),
-            "beta_tot_change_10": total_pct_change(self.fitted.iloc[shock_index - 10 - 1: shock_index]["beta"].values),
-            "beta_tot_change_25": total_pct_change(self.fitted.iloc[shock_index - 25 - 1: shock_index]["beta"].values),
-            "beta_tot_change_50": total_pct_change(self.fitted.iloc[shock_index - 50 - 1: shock_index]["beta"].values),
+            "beta_tot_change_5": total_pct_change(self.fitted.iloc[shock_index - 5 - 1: shock_index]["beta"].dropna().values),
+            "beta_tot_change_10": total_pct_change(self.fitted.iloc[shock_index - 10 - 1: shock_index]["beta"].dropna().values),
+            "beta_tot_change_25": total_pct_change(self.fitted.iloc[shock_index - 25 - 1: shock_index]["beta"].dropna().values),
+            "beta_tot_change_50": total_pct_change(self.fitted.iloc[shock_index - 50 - 1: shock_index]["beta"].dropna().values),
             #
             #
             "price_5_mean": self.fitted.iloc[shock_index - 5 - 1: shock_index]["close"].mean(),
@@ -306,10 +305,10 @@ class Dataset(object):
             "price_pct_change_50_mean": self.fitted.iloc[shock_index - 50 - 1: shock_index]["close"].mean(),
             "price_pct_change_50_std": self.fitted.iloc[shock_index - 50 - 1: shock_index]["close"].std(),
             #
-            "price_tot_change_5": total_pct_change(self.fitted.iloc[shock_index - 5 - 1: shock_index]["close"].values),
-            "price_tot_change_10": total_pct_change(self.fitted.iloc[shock_index - 10 - 1: shock_index]["close"].values),
-            "price_tot_change_25": total_pct_change(self.fitted.iloc[shock_index - 25 - 1: shock_index]["close"].values),
-            "price_tot_change_50": total_pct_change(self.fitted.iloc[shock_index - 50 - 1: shock_index]["close"].values),
+            "price_tot_change_5": total_pct_change(self.fitted.iloc[shock_index - 5 - 1: shock_index]["close"].dropna().values),
+            "price_tot_change_10": total_pct_change(self.fitted.iloc[shock_index - 10 - 1: shock_index]["close"].dropna().values),
+            "price_tot_change_25": total_pct_change(self.fitted.iloc[shock_index - 25 - 1: shock_index]["close"].dropna().values),
+            "price_tot_change_50": total_pct_change(self.fitted.iloc[shock_index - 50 - 1: shock_index]["close"].dropna().values),
             #
             #
             "volume_5_mean": self.fitted.iloc[shock_index - 5 - 1: shock_index]["volume"].mean(),
@@ -330,16 +329,17 @@ class Dataset(object):
             "volume_pct_change_50_mean": self.fitted.iloc[shock_index - 50 - 1: shock_index]["volume"].mean(),
             "volume_pct_change_50_std": self.fitted.iloc[shock_index - 50 - 1: shock_index]["volume"].std(),
             #
-            "volume_tot_change_5": total_pct_change(self.fitted.iloc[shock_index - 5 - 1: shock_index]["volume"].values),
-            "volume_tot_change_10": total_pct_change(self.fitted.iloc[shock_index - 10 - 1: shock_index]["volume"].values),
-            "volume_tot_change_25": total_pct_change(self.fitted.iloc[shock_index - 25 - 1: shock_index]["volume"].values),
-            "volume_tot_change_50": total_pct_change(self.fitted.iloc[shock_index - 50 - 1: shock_index]["volume"].values),
+            "volume_tot_change_5": total_pct_change(self.fitted.iloc[shock_index - 5 - 1: shock_index]["volume"].dropna().values),
+            "volume_tot_change_10": total_pct_change(self.fitted.iloc[shock_index - 10 - 1: shock_index]["volume"].dropna().values),
+            "volume_tot_change_25": total_pct_change(self.fitted.iloc[shock_index - 25 - 1: shock_index]["volume"].dropna().values),
+            "volume_tot_change_50": total_pct_change(self.fitted.iloc[shock_index - 50 - 1: shock_index]["volume"].dropna().values),
                 }
             )
 
-            import pickle
-            with open("../test.pkl", "wb") as f:
-                pickle.dump({"features": shock_features, "data": self.fitted}, f)
+        import pickle
+        with open("./test.pkl", "wb") as f:
+            pickle.dump({"features": shock_features, "data": self.fitted}, f)
+        print("done")
 
 
 
