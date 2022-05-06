@@ -5,10 +5,16 @@ import datetime
 from typing import List
 import numpy as np
 import matplotlib.pyplot as plt
+from itertools import product
+import json
+
 import pystable
 
 
 from shocks import *
+
+__all__ = ["FREQS", "COLUMNS", "Dataset"]
+
 
 FREQS = {
     "1m": "1T",
@@ -38,6 +44,17 @@ COLUMNS = (
 )
 
 
+@pd.api.extensions.register_series_accessor("tot_pct_change")
+class TotPctChange:
+    def __init__(self, pandas_obj):
+        self._obj = pandas_obj
+
+    def tot_pct_change(self):
+        return (
+            self._obj.__getitem__(-1) - self._obj.__getitem__(0)
+        ) / self._obj.__getitem__(0)
+
+
 class Dataset(object):
     def __init__(
         self,
@@ -54,7 +71,9 @@ class Dataset(object):
         pair_dir = from_root("data", "binance", self.pair)
         df_list = [
             pd.read_csv(fname, names=self.__columns)
-            for fname in [os.path.join(pair_dir, file) for file in os.listdir(pair_dir)]
+            for fname in [
+                os.path.join(pair_dir, file) for file in sorted(os.listdir(pair_dir))
+            ]
         ]
         return pd.concat(df_list, axis=0)
 
@@ -62,10 +81,7 @@ class Dataset(object):
     def resample_data(
         df: pd.DataFrame, freq: str = "1h", mode: str = "last"
     ) -> pd.DataFrame:
-        ohlc_dict = {
-            "close": mode,
-            "volume": "sum"
-        }
+        ohlc_dict = {"close": mode, "volume": "sum"}
         return (
             df.resample(FREQS[freq], closed="left", label="left")
             .apply(ohlc_dict)
@@ -94,7 +110,9 @@ class Dataset(object):
         self.data = Dataset.resample_data(
             df=Dataset.datetime_index(df=self.raw_data), freq=freq
         )
-        assert self.data.columns.tolist() == list(keep_cols), "columns are missing, consider adding them in the ohlc_dict in the resample method"
+        assert self.data.columns.tolist() == list(
+            keep_cols
+        ), "columns are missing, consider adding them in the ohlc_dict in the resample method"
         for col in keep_cols:
             self.data[col] = self.data[col].ffill()
         self.data["close"] = self.data["close"].ffill()
@@ -207,19 +225,15 @@ class Dataset(object):
         plt.show()
 
     def build_dataset(self, shocks_window=1000, fit_window=250, std_from_mean=3.5):
-
-        def tot_pct_change(klass):
-            # using klass instead of self not to create confusion with Dataset class' self
-            to_list = klass.tolist()
-            return (to_list.__getitem__(-1) - to_list.__getitem__(0)) / to_list.__getitem__(0)
-
         def compute_feature(df, shock_idx, idx_before_shock, col, *args):
             """*args are df class methods which can be used with getattr()"""
-            df_slice = df.iloc[shock_idx - idx_before_shock - 1: shock_idx][col]
+            df_slice = df.iloc[shock_idx - idx_before_shock - 1 : shock_idx][col]
             for arg in args:
+                # in order to use the method "tot_pct_change" we must call df.tot_pct_change.tot_pct_change()
+                if arg == "tot_pct_change":
+                    df_slice = getattr(df_slice, arg)
                 df_slice = getattr(df_slice, arg)()
             return df_slice
-
 
         # 1. detect shocks for all data
         for start in range(len(self.data) - shocks_window):
@@ -234,145 +248,49 @@ class Dataset(object):
         self.fit(window=fit_window)
 
         # 3. create features:
-        #           avg pct change in alpha, beta  at 5, 10, 50 observations before shock
-        #           avg pct change in price, volume  at 5, 10, 50 observations before shock
+        # avg pct change in alpha, beta, price, volume  at 5, 10, 50 observations before shock
+        cols = ("alpha", "beta", "close", "volume")
+        observations_before_shocks = (5, 10, 25, 50)
+        measures = ("mean", "std", "tot_pct_change")
+        operations = "pct_change"
 
+        features = list(product(cols, observations_before_shocks, measures))
+        for i in range(len(features)):
+            for op in [operations]:
+                new = list(features[i])
+                if new[-1] != "tot_pct_change":
+                    new.insert(2, op)
+                    features.append(new)
 
-        # self.fitted is a pandas dataframe
         times = self.fitted.index.tolist()
         starting_time = self.fitted.index[0]
         shock_features = []
         for shock in self.shocks:
             if shock["start"] <= starting_time:
                 continue
-            shock_index = (
-                times.index(shock["start"]) - 5
-            )  # shock signal should fire off 5 observations before shock happens else it's too late
-
-
+            # shock signal should fire off 5 observations before shock happens else it's too late
+            shock_index = times.index(shock["start"]) - 5
             shock_features.append(
                 {
-            "time": shock["start"],
-            #
-            "alpha_5_mean": self.fitted.iloc[shock_index - 5 - 1 : shock_index]["alpha"].mean(),
-            "alpha_5_std": self.fitted.iloc[shock_index - 5 - 1 : shock_index]["alpha"].std(),
-            "alpha_10_mean": self.fitted.iloc[shock_index - 10 - 1 : shock_index]["alpha"].mean(),
-            "alpha_10_std": self.fitted.iloc[shock_index - 10 - 1 : shock_index]["alpha"].std(),
-            "alpha_25_mean": self.fitted.iloc[shock_index - 25 - 1 : shock_index]["alpha"].mean(),
-            "alpha_25_std": self.fitted.iloc[shock_index - 25 - 1 : shock_index]["alpha"].std(),
-            "alpha_50_mean": self.fitted.iloc[shock_index - 50 - 1 : shock_index]["alpha"].mean(),
-            "alpha_50_std": self.fitted.iloc[shock_index - 50 - 1 : shock_index]["alpha"].std(),
-            #
-            "alpha_pct_change_5_mean": self.fitted.iloc[shock_index - 5 - 1 : shock_index]["alpha"].pct_change.mean(),
-            "alpha_pct_change_5_std": self.fitted.iloc[shock_index - 5 - 1 : shock_index]["alpha"].std(),
-            "alpha_pct_change_10_mean": self.fitted.iloc[shock_index - 10 - 1 : shock_index]["alpha"].mean(),
-            "alpha_pct_change_10_std": self.fitted.iloc[shock_index - 10 - 1 : shock_index]["alpha"].std(),
-            "alpha_pct_change_25_mean": self.fitted.iloc[shock_index - 25 - 1 : shock_index]["alpha"].mean(),
-            "alpha_pct_change_25_std": self.fitted.iloc[shock_index - 25 - 1 : shock_index]["alpha"].std(),
-            "alpha_pct_change_50_mean": self.fitted.iloc[shock_index - 50 - 1 : shock_index]["alpha"].mean(),
-            "alpha_pct_change_50_std": self.fitted.iloc[shock_index - 50 - 1 : shock_index]["alpha"].std(),
-            # 
-            "alpha_tot_change_5":  total_pct_change(self.fitted.iloc[shock_index - 5 - 1 : shock_index]["alpha"].dropna().tolist()),
-            "alpha_tot_change_10": total_pct_change(self.fitted.iloc[shock_index - 10 - 1 : shock_index]["alpha"].dropna().tolist()),
-            "alpha_tot_change_25": total_pct_change(self.fitted.iloc[shock_index - 25 - 1 : shock_index]["alpha"].dropna().tolist()),
-            "alpha_tot_change_50": total_pct_change(self.fitted.iloc[shock_index - 50 - 1 : shock_index]["alpha"].dropna().tolist()),
-            #
-            #
-            "beta_5_mean": self.fitted.iloc[shock_index - 5 - 1: shock_index]["beta"].mean(),
-            "beta_5_std": self.fitted.iloc[shock_index - 5 - 1: shock_index]["beta"].std(),
-            "beta_10_mean": self.fitted.iloc[shock_index - 10 - 1: shock_index]["beta"].mean(),
-            "beta_10_std": self.fitted.iloc[shock_index - 10 - 1: shock_index]["beta"].std(),
-            "beta_25_mean": self.fitted.iloc[shock_index - 25 - 1: shock_index]["beta"].mean(),
-            "beta_25_std": self.fitted.iloc[shock_index - 25 - 1: shock_index]["beta"].std(),
-            "beta_50_mean": self.fitted.iloc[shock_index - 50 - 1: shock_index]["beta"].mean(),
-            "beta_50_std": self.fitted.iloc[shock_index - 50 - 1: shock_index]["beta"].std(),
-            #
-            "beta_pct_change_5_mean": self.fitted.iloc[shock_index - 5 - 1: shock_index]["beta"].mean(),
-            "beta_pct_change_5_std": self.fitted.iloc[shock_index - 5 - 1: shock_index]["beta"].std(),
-            "beta_pct_change_10_mean": self.fitted.iloc[shock_index - 10 - 1: shock_index]["beta"].mean(),
-            "beta_pct_change_10_std": self.fitted.iloc[shock_index - 10 - 1: shock_index]["beta"].std(),
-            "beta_pct_change_25_mean": self.fitted.iloc[shock_index - 25 - 1: shock_index]["beta"].mean(),
-            "beta_pct_change_25_std": self.fitted.iloc[shock_index - 25 - 1: shock_index]["beta"].std(),
-            "beta_pct_change_50_mean": self.fitted.iloc[shock_index - 50 - 1: shock_index]["beta"].mean(),
-            "beta_pct_change_50_std": self.fitted.iloc[shock_index - 50 - 1: shock_index]["beta"].std(),
-            #
-            "beta_tot_change_5": total_pct_change(self.fitted.iloc[shock_index - 5 - 1: shock_index]["beta"].dropna().tolist()),
-            "beta_tot_change_10": total_pct_change(self.fitted.iloc[shock_index - 10 - 1: shock_index]["beta"].dropna().tolist()),
-            "beta_tot_change_25": total_pct_change(self.fitted.iloc[shock_index - 25 - 1: shock_index]["beta"].dropna().tolist()),
-            "beta_tot_change_50": total_pct_change(self.fitted.iloc[shock_index - 50 - 1: shock_index]["beta"].dropna().tolist()),
-            #
-            #
-            "price_5_mean": self.fitted.iloc[shock_index - 5 - 1: shock_index]["close"].mean(),
-            "price_5_std": self.fitted.iloc[shock_index - 5 - 1: shock_index]["close"].std(),
-            "price_10_mean": self.fitted.iloc[shock_index - 10 - 1: shock_index]["close"].mean(),
-            "price_10_std": self.fitted.iloc[shock_index - 10 - 1: shock_index]["close"].std(),
-            "price_25_mean": self.fitted.iloc[shock_index - 25 - 1: shock_index]["close"].mean(),
-            "price_25_std": self.fitted.iloc[shock_index - 25 - 1: shock_index]["close"].std(),
-            "price_50_mean": self.fitted.iloc[shock_index - 50 - 1: shock_index]["close"].mean(),
-            "price_50_std": self.fitted.iloc[shock_index - 50 - 1: shock_index]["close"].std(),
-            #
-            "price_pct_change_5_mean": self.fitted.iloc[shock_index - 5 - 1: shock_index]["close"].mean(),
-            "price_pct_change_5_std": self.fitted.iloc[shock_index - 5 - 1: shock_index]["close"].std(),
-            "price_pct_change_10_mean": self.fitted.iloc[shock_index - 10 - 1: shock_index]["close"].mean(),
-            "price_pct_change_10_std": self.fitted.iloc[shock_index - 10 - 1: shock_index]["close"].std(),
-            "price_pct_change_25_mean": self.fitted.iloc[shock_index - 25 - 1: shock_index]["close"].mean(),
-            "price_pct_change_25_std": self.fitted.iloc[shock_index - 25 - 1: shock_index]["close"].std(),
-            "price_pct_change_50_mean": self.fitted.iloc[shock_index - 50 - 1: shock_index]["close"].mean(),
-            "price_pct_change_50_std": self.fitted.iloc[shock_index - 50 - 1: shock_index]["close"].std(),
-            #
-            "price_tot_change_5": total_pct_change(self.fitted.iloc[shock_index - 5 - 1: shock_index]["close"].dropna().tolist()),
-            "price_tot_change_10": total_pct_change(self.fitted.iloc[shock_index - 10 - 1: shock_index]["close"].dropna().tolist()),
-            "price_tot_change_25": total_pct_change(self.fitted.iloc[shock_index - 25 - 1: shock_index]["close"].dropna().tolist()),
-            "price_tot_change_50": total_pct_change(self.fitted.iloc[shock_index - 50 - 1: shock_index]["close"].dropna().tolist()),
-            #
-            #
-            "volume_5_mean": self.fitted.iloc[shock_index - 5 - 1: shock_index]["volume"].mean(),
-            "volume_5_std": self.fitted.iloc[shock_index - 5 - 1: shock_index]["volume"].std(),
-            "volume_10_mean": self.fitted.iloc[shock_index - 10 - 1: shock_index]["volume"].mean(),
-            "volume_10_std": self.fitted.iloc[shock_index - 10 - 1: shock_index]["volume"].std(),
-            "volume_25_mean": self.fitted.iloc[shock_index - 25 - 1: shock_index]["volume"].mean(),
-            "volume_25_std": self.fitted.iloc[shock_index - 25 - 1: shock_index]["volume"].std(),
-            "volume_50_mean": self.fitted.iloc[shock_index - 50 - 1: shock_index]["volume"].mean(),
-            "volume_50_std": self.fitted.iloc[shock_index - 50 - 1: shock_index]["volume"].std(),
-            #
-            "volume_pct_change_5_mean": self.fitted.iloc[shock_index - 5 - 1: shock_index]["volume"].mean(),
-            "volume_pct_change_5_std": self.fitted.iloc[shock_index - 5 - 1: shock_index]["volume"].std(),
-            "volume_pct_change_10_mean": self.fitted.iloc[shock_index - 10 - 1: shock_index]["volume"].mean(),
-            "volume_pct_change_10_std": self.fitted.iloc[shock_index - 10 - 1: shock_index]["volume"].std(),
-            "volume_pct_change_25_mean": self.fitted.iloc[shock_index - 25 - 1: shock_index]["volume"].mean(),
-            "volume_pct_change_25_std": self.fitted.iloc[shock_index - 25 - 1: shock_index]["volume"].std(),
-            "volume_pct_change_50_mean": self.fitted.iloc[shock_index - 50 - 1: shock_index]["volume"].mean(),
-            "volume_pct_change_50_std": self.fitted.iloc[shock_index - 50 - 1: shock_index]["volume"].std(),
-            #
-            "volume_tot_change_5": total_pct_change(self.fitted.iloc[shock_index - 5 - 1: shock_index]["volume"].dropna().tolist()),
-            "volume_tot_change_10": total_pct_change(self.fitted.iloc[shock_index - 10 - 1: shock_index]["volume"].dropna().tolist()),
-            "volume_tot_change_25": total_pct_change(self.fitted.iloc[shock_index - 25 - 1: shock_index]["volume"].dropna().tolist()),
-            "volume_tot_change_50": total_pct_change(self.fitted.iloc[shock_index - 50 - 1: shock_index]["volume"].dropna().tolist()),
+                    "_".join(map(str, feature)): compute_feature(
+                        self.fitted,
+                        shock_index,
+                        feature[1],
+                        feature[0],
+                        *feature[2:],
+                    )
+                    for feature in features
                 }
             )
 
-        import pickle
-        with open("./test.pkl", "wb") as f:
-            pickle.dump({"features": shock_features, "data": self.fitted}, f)
-        print("done")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        save_path = from_root("data", "processed")
+        with open(f"{save_path}/{self.pair}.json", "w") as f:
+            json.dump(
+                {
+                    "features": shock_features,
+                    "data": self.fitted,
+                    "shocks": self.shocks,
+                },
+                f,
+            )
+        print(f"{self.pair} has been processed succesfully")
