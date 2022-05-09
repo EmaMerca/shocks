@@ -15,6 +15,7 @@ beautifulsoup4 = "^4.11.1"
 dvc = {extras = ["s3"], version = "^2.10.2"}
 pystable = "^0.2.3"
 scipy = "^1.8.0"
+scikit-learn = "^1.0.2"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"

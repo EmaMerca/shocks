@@ -6,7 +6,9 @@ from typing import List
 import numpy as np
 import matplotlib.pyplot as plt
 from itertools import product
-import json
+import pickle
+from tqdm import tqdm_notebook
+import random
 
 import pystable
 
@@ -42,17 +44,6 @@ COLUMNS = (
     "taker buy quote asset volume",
     "ignore",
 )
-
-
-@pd.api.extensions.register_series_accessor("tot_pct_change")
-class TotPctChange:
-    def __init__(self, pandas_obj):
-        self._obj = pandas_obj
-
-    def tot_pct_change(self):
-        return (
-            self._obj.__getitem__(-1) - self._obj.__getitem__(0)
-        ) / self._obj.__getitem__(0)
 
 
 class Dataset(object):
@@ -107,6 +98,7 @@ class Dataset(object):
         return df
 
     def preprocess(self, freq="1h", keep_cols: List[str] = ("close", "volume")) -> None:
+        self.freq = freq
         self.data = Dataset.resample_data(
             df=Dataset.datetime_index(df=self.raw_data), freq=freq
         )
@@ -225,18 +217,25 @@ class Dataset(object):
         plt.show()
 
     def build_dataset(self, shocks_window=1000, fit_window=250, std_from_mean=3.5):
-        def compute_feature(df, shock_idx, idx_before_shock, col, *args):
-            """*args are df class methods which can be used with getattr()"""
-            df_slice = df.iloc[shock_idx - idx_before_shock - 1 : shock_idx][col]
-            for arg in args:
-                # in order to use the method "tot_pct_change" we must call df.tot_pct_change.tot_pct_change()
-                if arg == "tot_pct_change":
-                    df_slice = getattr(df_slice, arg)
-                df_slice = getattr(df_slice, arg)()
-            return df_slice
+        def compute_features(data, shock_idx, idx_before_shock, *ops):
+            res = data[:, shock_idx - idx_before_shock - 1 : shock_idx]
+            for op in ops:
+                res = operations[op](res)
+            return res
+
+
+
+
+        def assign_name(columns: list, feature_names: list) -> list:
+            return list(
+                map(
+                    lambda x: f"{x}_{'_'.join(map(str, feature_names))}",
+                    columns,
+                )
+            )
 
         # 1. detect shocks for all data
-        for start in range(len(self.data) - shocks_window):
+        for start in range(0, len(self.data) - shocks_window, shocks_window):
             sliced = self.data.iloc[start : start + shocks_window]
             self.find_shocks(
                 start_date=sliced.index[0],
@@ -249,43 +248,99 @@ class Dataset(object):
 
         # 3. create features:
         # avg pct change in alpha, beta, price, volume  at 5, 10, 50 observations before shock
-        cols = ("alpha", "beta", "close", "volume")
+        cols = ["alpha", "beta", "volume", "close"]  # close should be last column
         observations_before_shocks = (5, 10, 25, 50)
         measures = ("mean", "std", "tot_pct_change")
-        operations = "pct_change"
+        additional_measures = "pct_change"
 
-        features = list(product(cols, observations_before_shocks, measures))
-        for i in range(len(features)):
-            for op in [operations]:
-                new = list(features[i])
+        features_names = list(product(observations_before_shocks, measures))
+        for i in range(len(features_names)):
+            for add_meas in [additional_measures]:
+                new = list(features_names[i])
                 if new[-1] != "tot_pct_change":
-                    new.insert(2, op)
-                    features.append(new)
+                    new.insert(1, add_meas)
+                    features_names.append(new)
+
+        operations = {
+            "mean": lambda x: np.mean(x, axis=1),
+            "std": lambda x: np.std(x, axis=1),
+            "pct_change": lambda x: np.diff(x) / x[:, :-1] * 100,
+            "tot_pct_change": lambda x: 100 * (x[:, -1] - x[:, 0]) / x[:, 0],
+        }
 
         times = self.fitted.index.tolist()
         starting_time = self.fitted.index[0]
+        shocks_indexes = []
         shock_features = []
-        for shock in self.shocks:
+        np_data = self.fitted[cols].to_numpy().T
+        for shock in tqdm_notebook(self.shocks):
             if shock["start"] <= starting_time:
                 continue
             # shock signal should fire off 5 observations before shock happens else it's too late
-            shock_index = times.index(shock["start"]) - 5
-            shock_features.append(
-                {
-                    "_".join(map(str, feature)): compute_feature(
-                        self.fitted,
-                        shock_index,
-                        feature[1],
-                        feature[0],
-                        *feature[2:],
+            shock_index = times.index(shock["start"])
+            shocks_indexes.extend((i for i in range(shock_index - 5, shock_index + 5)))
+            shock_feature = {}
+            for feature_name in features_names:
+                # compute 1 feature for all the cols
+                feature = compute_features(
+                    np_data,
+                    shock_index - 5,
+                    feature_name[0],
+                    *feature_name[1:],
+                )
+                named_features = dict(
+                    zip(
+                        assign_name(cols, feature_name),
+                        feature,
                     )
-                    for feature in features
-                }
+                )
+                shock_feature = dict(
+                    named_features,
+                    **shock_feature,
+                )
+            # -1 if price drops, 1 if price increases
+            shock_feature["direction"] = (
+                -1 if np_data[-1, shock_index - 1] >= np_data[-1, shock_index] else 1
             )
+            shock_features.append(shock_feature)
+
+        # add non shocks samples
+        non_shock_indexes = [
+            i
+            for i in range(observations_before_shocks[-1] + 5 + 1, len(times))
+            if i not in shocks_indexes
+            and times[i] > starting_time
+        ]
+
+        for non_shock_index in tqdm_notebook(
+            random.sample(non_shock_indexes, min(len(self.fitted) // 2, 50 * len(self.shocks)))
+        ):
+            non_shock_feature = {}
+            for feature_name in features_names:
+                # compute 1 feature for all the cols
+                feature = compute_features(
+                    np_data,
+                    non_shock_index - 5,
+                    feature_name[0],
+                    *feature_name[1:],
+                )
+                named_features = dict(
+                    zip(
+                        assign_name(cols, feature_name),
+                        feature,
+                    )
+                )
+                non_shock_feature = dict(
+                    named_features,
+                    **non_shock_feature,
+                )
+            # 0 means not a shock
+            non_shock_feature["direction"] = 0
+            shock_features.append(non_shock_feature)
 
         save_path = from_root("data", "processed")
-        with open(f"{save_path}/{self.pair}.json", "w") as f:
-            json.dump(
+        with open(f"{save_path}/{self.pair}_{self.freq}.pkl", "wb") as f:
+            pickle.dump(
                 {
                     "features": shock_features,
                     "data": self.fitted,
