@@ -183,7 +183,6 @@ class Dataset(object):
             init_fit["parameterization"],
         )
 
-        # TODO: make this more efficient: the fit_levy method should only be called once https://stackoverflow.com/questions/22218438/returning-two-values-from-pandas-rolling-apply
         for param in "alpha beta".split():
             df[param] = (
                 df["log_returns"]
@@ -223,9 +222,6 @@ class Dataset(object):
                 res = operations[op](res)
             return res
 
-
-
-
         def assign_name(columns: list, feature_names: list) -> list:
             return list(
                 map(
@@ -234,6 +230,8 @@ class Dataset(object):
                 )
             )
 
+        from time import time
+        t = time()
         # 1. detect shocks for all data
         for start in range(0, len(self.data) - shocks_window, shocks_window):
             sliced = self.data.iloc[start : start + shocks_window]
@@ -242,10 +240,12 @@ class Dataset(object):
                 end_date=sliced.index[-1],
                 std_from_mean=std_from_mean,
             )
-
+        print("shocks detected. Time: ", time() - t)
+        t = time()
         # 2. fit data
         self.fit(window=fit_window)
-
+        print("Data fitted. Time: ", time() - t)
+        t = time()
         # 3. create features:
         # avg pct change in alpha, beta, price, volume  at 5, 10, 50 observations before shock
         cols = ["alpha", "beta", "volume", "close"]  # close should be last column
@@ -303,7 +303,8 @@ class Dataset(object):
                 -1 if np_data[-1, shock_index - 1] >= np_data[-1, shock_index] else 1
             )
             shock_features.append(shock_feature)
-
+        print("Shocks processed. Time: ", time() - t)
+        t = time()
         # add non shocks samples
         non_shock_indexes = [
             i
@@ -338,6 +339,7 @@ class Dataset(object):
             non_shock_feature["direction"] = 0
             shock_features.append(non_shock_feature)
 
+        print("Non shocks processed. Time: ", time() - t)
         save_path = from_root("data", "processed")
         with open(f"{save_path}/{self.pair}_{self.freq}.pkl", "wb") as f:
             pickle.dump(
