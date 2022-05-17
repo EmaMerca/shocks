@@ -230,7 +230,7 @@ class Dataset(object):
                     # plt.text(shock["start"], label_position, shock["duration"])
         plt.show()
 
-    def build_dataset(self, shocks_window=1000, fit_window=250, std_from_mean=3.5):
+    def build_dataset(self, shocks_window=1000, fit_window=250, std_from_mean=3.5, max_workers=8):
         def compute_features(data, shock_idx, idx_before_shock, *ops):
             res = data[:, shock_idx - idx_before_shock - 1 : shock_idx]
             for op in ops:
@@ -259,7 +259,7 @@ class Dataset(object):
         print("shocks detected. Time: ", time() - t)
         t = time()
         # 2. fit data
-        self.fit(window=fit_window)
+        self.fit(window=fit_window, max_workers=max_workers)
         print("Data fitted. Time: ", time() - t)
         t = time()
         # 3. create features:
