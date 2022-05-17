@@ -9,6 +9,9 @@ from itertools import product
 import pickle
 from tqdm import tqdm_notebook
 import random
+from concurrent.futures import ProcessPoolExecutor
+from numpy.lib.stride_tricks import sliding_window_view
+
 
 import pystable
 
@@ -169,11 +172,27 @@ class Dataset(object):
                     # TODO: allow annotations
                     # plt.text(shock["start"], label_position, shock["duration"])
 
-    def fit(self, window=250, start_date=None, end_date=None):
+    def fit(self, window=250, start_date=None, end_date=None, max_workers=8):
         if start_date is not None and end_date is not None:
             df = Dataset.filter_data(self.data, start_date, end_date)
         else:
             df = self.data
+        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+            fitted = executor.map(
+                Dataset.fit_levy,
+                sliding_window_view(
+                    np.array(df["log_returns"].values), window_shape=window
+                ),
+            )
+
+        fitted = np.array(list(fitted))
+        for i, col in enumerate(["alpha", "beta", "sigma", "mu_0", "mu_1"]):
+            df[col] = np.concatenate([[np.nan] * (window - 1), fitted[:, i]])
+
+        self.fitted = df.dropna()
+
+    @staticmethod
+    def fit_levy(log_returns):
         init_fit = {"alpha": 2, "beta": 0, "sigma": 1, "mu": 0, "parameterization": 1}
         dist = pystable.create(
             init_fit["alpha"],
@@ -182,26 +201,22 @@ class Dataset(object):
             init_fit["mu"],
             init_fit["parameterization"],
         )
-
-        for param in "alpha beta".split():
-            df[param] = (
-                df["log_returns"]
-                .rolling(window)
-                .apply(lambda x: self.fit_levy(dist, x, param))
-            )
-
-        self.fitted = df.dropna()
-
-    def fit_levy(self, dist, log_returns, return_param):
         pystable.fit(dist, log_returns, len(log_returns))
-        return getattr(dist.contents, return_param)
+        return [
+            dist.contents.alpha,
+            dist.contents.beta,
+            dist.contents.sigma,
+            dist.contents.mu_0,
+            dist.contents.mu_1,
+        ]
 
     @staticmethod
     def plot_fit(df, shocks=None):
-        fig, axs = plt.subplots(4)
+        columns = "returns close alpha beta sigma mu_0 mu_1".split()
+        fig, axs = plt.subplots(len(columns))
         fig.suptitle("BTC/USD")
         df = df.dropna()
-        for idx, key in enumerate("returns close alpha beta".split()):
+        for idx, key in enumerate(columns):
             axs[idx].plot(df[key])
             axs[idx].set_title(key)
             axs[idx].grid(True)
@@ -231,6 +246,7 @@ class Dataset(object):
             )
 
         from time import time
+
         t = time()
         # 1. detect shocks for all data
         for start in range(0, len(self.data) - shocks_window, shocks_window):
@@ -248,7 +264,15 @@ class Dataset(object):
         t = time()
         # 3. create features:
         # avg pct change in alpha, beta, price, volume  at 5, 10, 50 observations before shock
-        cols = ["alpha", "beta", "volume", "close"]  # close should be last column
+        cols = [
+            "alpha",
+            "beta",
+            "sigma",
+            "mu_0",
+            "mu_1",
+            "volume",
+            "close",
+        ]  # close should be last column
         observations_before_shocks = (5, 10, 25, 50)
         measures = ("mean", "std", "tot_pct_change")
         additional_measures = "pct_change"
@@ -309,12 +333,13 @@ class Dataset(object):
         non_shock_indexes = [
             i
             for i in range(observations_before_shocks[-1] + 5 + 1, len(times))
-            if i not in shocks_indexes
-            and times[i] > starting_time
+            if i not in shocks_indexes and times[i] > starting_time
         ]
 
         for non_shock_index in tqdm_notebook(
-            random.sample(non_shock_indexes, min(len(self.fitted) // 2, 50 * len(self.shocks)))
+            random.sample(
+                non_shock_indexes, min(len(self.fitted) // 2, 50 * len(self.shocks))
+            )
         ):
             non_shock_feature = {}
             for feature_name in features_names:
