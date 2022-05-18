@@ -6,7 +6,10 @@
 # pyenv: to switch between different python versions
 apt-get install -y make build-essential libssl-dev zlib1g-dev python3-distutils \
 libbz2-dev libreadline-dev libsqlite3-dev wget curl llvm libncurses5-dev \
-libncursesw5-dev xz-utils tk-dev libffi-dev liblzma-dev python3-openssl
+libncursesw5-dev xz-utils tk-dev libffi-dev liblzma-dev python3-openssl libarchive-dev
+
+cd /usr/lib/x86_64-linux-gnu/
+sudo ln -s -f libarchive.a liblibarchive.a && cd
 
 curl https://pyenv.run | bash
 

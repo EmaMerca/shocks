@@ -7,7 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from itertools import product
 import pickle
-from tqdm import tqdm_notebook
+from tqdm import tqdm
 import random
 from concurrent.futures import ProcessPoolExecutor
 from numpy.lib.stride_tricks import sliding_window_view
@@ -16,7 +16,7 @@ from numpy.lib.stride_tricks import sliding_window_view
 import pystable
 
 
-from shocks import *
+from shocks.utils import *
 
 __all__ = ["FREQS", "COLUMNS", "Dataset"]
 
@@ -230,7 +230,14 @@ class Dataset(object):
                     # plt.text(shock["start"], label_position, shock["duration"])
         plt.show()
 
-    def build_dataset(self, shocks_window=1000, fit_window=250, std_from_mean=3.5, max_workers=8):
+    def build_dataset(
+        self,
+        shocks_window=1000,
+        fit_window=250,
+        std_from_mean=3.5,
+        max_workers=8,
+        from_checkpoint=False,
+    ):
         def compute_features(data, shock_idx, idx_before_shock, *ops):
             res = data[:, shock_idx - idx_before_shock - 1 : shock_idx]
             for op in ops:
@@ -245,23 +252,31 @@ class Dataset(object):
                 )
             )
 
-        from time import time
+        checkpoint_path = from_root("data", "checkpoints")
+        if from_checkpoint:
+            with open(f"{checkpoint_path}/{self.pair}_{self.freq}.pkl", "rb") as f:
+                file = pickle.load(f)
+                self.fitted, self.shocks = file["data"], file["shocks"]
+        else:
+            # 1. detect shocks for all data
+            for start in range(0, len(self.data) - shocks_window, shocks_window):
+                sliced = self.data.iloc[start : start + shocks_window]
+                self.find_shocks(
+                    start_date=sliced.index[0],
+                    end_date=sliced.index[-1],
+                    std_from_mean=std_from_mean,
+                )
 
-        t = time()
-        # 1. detect shocks for all data
-        for start in range(0, len(self.data) - shocks_window, shocks_window):
-            sliced = self.data.iloc[start : start + shocks_window]
-            self.find_shocks(
-                start_date=sliced.index[0],
-                end_date=sliced.index[-1],
-                std_from_mean=std_from_mean,
-            )
-        print("shocks detected. Time: ", time() - t)
-        t = time()
-        # 2. fit data
-        self.fit(window=fit_window, max_workers=max_workers)
-        print("Data fitted. Time: ", time() - t)
-        t = time()
+            print("fitting data...")
+            # 2. fit data
+            self.fit(window=fit_window, max_workers=max_workers)
+            with open(f"{checkpoint_path}/{self.pair}_{self.freq}.pkl", "wb") as f:
+                pickle.dump(
+                    {"data": self.fitted, "shocks": self.shocks},
+                    f,
+                )
+            print("Saved checkpoint.")
+
         # 3. create features:
         # avg pct change in alpha, beta, price, volume  at 5, 10, 50 observations before shock
         cols = [
@@ -289,7 +304,9 @@ class Dataset(object):
             "mean": lambda x: np.mean(x, axis=1),
             "std": lambda x: np.std(x, axis=1),
             "pct_change": lambda x: np.diff(x) / x[:, :-1] * 100,
-            "tot_pct_change": lambda x: 100 * (x[:, -1] - x[:, 0]) / x[:, 0],
+            "tot_pct_change": lambda x: 100 * (x[:, -1] - x[:, 0]) / x[:, 0]
+            if x.shape[-1] > 0
+            else np.nan,
         }
 
         times = self.fitted.index.tolist()
@@ -297,7 +314,7 @@ class Dataset(object):
         shocks_indexes = []
         shock_features = []
         np_data = self.fitted[cols].to_numpy().T
-        for shock in tqdm_notebook(self.shocks):
+        for shock in tqdm(self.shocks):
             if shock["start"] <= starting_time:
                 continue
             # shock signal should fire off 5 observations before shock happens else it's too late
@@ -327,8 +344,7 @@ class Dataset(object):
                 -1 if np_data[-1, shock_index - 1] >= np_data[-1, shock_index] else 1
             )
             shock_features.append(shock_feature)
-        print("Shocks processed. Time: ", time() - t)
-        t = time()
+        print("\nFitted\n")
         # add non shocks samples
         non_shock_indexes = [
             i
@@ -336,7 +352,7 @@ class Dataset(object):
             if i not in shocks_indexes and times[i] > starting_time
         ]
 
-        for non_shock_index in tqdm_notebook(
+        for non_shock_index in tqdm(
             random.sample(
                 non_shock_indexes, min(len(self.fitted) // 2, 50 * len(self.shocks))
             )
@@ -364,7 +380,6 @@ class Dataset(object):
             non_shock_feature["direction"] = 0
             shock_features.append(non_shock_feature)
 
-        print("Non shocks processed. Time: ", time() - t)
         save_path = from_root("data", "processed")
         with open(f"{save_path}/{self.pair}_{self.freq}.pkl", "wb") as f:
             pickle.dump(
@@ -376,3 +391,9 @@ class Dataset(object):
                 f,
             )
         print(f"{self.pair} has been processed succesfully")
+
+
+if __name__ == "__main__":
+    data = Dataset(pair="JOEBTC")
+    data.preprocess(freq="5m")
+    data.build_dataset(max_workers=4)

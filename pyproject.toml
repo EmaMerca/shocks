@@ -17,6 +17,8 @@ pystable = "^0.2.3"
 scipy = "^1.8.0"
 scikit-learn = "^1.0.2"
 cotyledon = "^1.7.3"
+bs4 = "^0.0.1"
+libarchive = "^0.4.7"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
