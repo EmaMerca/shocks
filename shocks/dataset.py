@@ -306,7 +306,7 @@ class Dataset(object):
             "pct_change": lambda x: np.diff(x) / x[:, :-1] * 100,
             "tot_pct_change": lambda x: 100 * (x[:, -1] - x[:, 0]) / x[:, 0]
             if x.shape[-1] > 0
-            else np.nan,
+            else None,
         }
 
         times = self.fitted.index.tolist()
@@ -329,20 +329,22 @@ class Dataset(object):
                     feature_name[0],
                     *feature_name[1:],
                 )
-                named_features = dict(
-                    zip(
-                        assign_name(cols, feature_name),
-                        feature,
+                if feature is not None:
+                    named_features = dict(
+                        zip(
+                            assign_name(cols, feature_name),
+                            feature,
+                        )
                     )
-                )
-                shock_feature = dict(
-                    named_features,
-                    **shock_feature,
-                )
+                    shock_feature = dict(
+                        named_features,
+                        **shock_feature,
+                    )
             # -1 if price drops, 1 if price increases
             shock_feature["direction"] = (
                 -1 if np_data[-1, shock_index - 1] >= np_data[-1, shock_index] else 1
             )
+            shock_feature["time"] = shock_index
             shock_features.append(shock_feature)
         print("\nFitted\n")
         # add non shocks samples
@@ -394,6 +396,31 @@ class Dataset(object):
 
 
 if __name__ == "__main__":
-    data = Dataset(pair="JOEBTC")
+    data = Dataset(pair="AVAXBTC")
     data.preprocess(freq="5m")
-    data.build_dataset(max_workers=4)
+    data.build_dataset(from_checkpoint=False)
+
+
+class LobsterReader:
+    def __init__(
+        self, fname: str, start_date: str = "2030-01-01", end_date: str = "1990-01-01"
+    ) -> None:
+        self.orderbook_cols = ["sell", "vsell", "buy", "vbuy"]
+        self.message_cols = [
+            "time",
+            "event_type",
+            "order_id",
+            "size",
+            "price",
+            "direction",
+            "unk",
+        ]
+
+    def merge_csv_from_zip(self, fname: str, start_date: str, end_date: str) -> None:
+        """
+        Merge all csv files from a zip file
+        """
+        with ZipFile(fname, "r") as zip_file:
+            zip_file.extractall(path=from_root("data", "raw"))
+        self.merge_csv(start_date, end_date)
+
