@@ -25,7 +25,9 @@ exec "$SHELL"
 pyenv install 3.9.11
 
 # poetry: managing dependecies
-curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py | python -source $HOME/.poetry/env
+curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py | python -
+
+source $HOME/.poetry/env
 
 cd ~/stock-shocks
 pyenv local 3.9.11
