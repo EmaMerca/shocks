@@ -208,19 +208,7 @@ class BaseDataset:
         max_workers=8,
         from_checkpoint=False,
     ):
-        def compute_features(data, shock_idx, idx_before_shock, *ops):
-            res = data[:, shock_idx - idx_before_shock - 1 : shock_idx]
-            for op in ops:
-                res = operations[op](res)
-            return res
 
-        def assign_name(columns: list, feature_names: list) -> list:
-            return list(
-                map(
-                    lambda x: f"{x}_{'_'.join(map(str, feature_names))}",
-                    columns,
-                )
-            )
 
         checkpoint_path = from_root("data", "checkpoints")
         if from_checkpoint:
@@ -248,6 +236,19 @@ class BaseDataset:
             print("Saved checkpoint.")
 
         # 3. create features:
+        def compute_features(data, shock_idx, idx_before_shock, *ops):
+            res = data[:, shock_idx - idx_before_shock - 1 : shock_idx]
+            for op in ops:
+                res = operations[op](res)
+            return res
+
+        def assign_name(columns: list, feature_names: list) -> list:
+            return list(
+                map(
+                    lambda x: f"{x}_{'_'.join(map(str, feature_names))}",
+                    columns,
+                )
+            )
         # avg pct change in alpha, beta, price, volume  at 5, 10, 50 observations before shock
         cols = [
             "alpha",

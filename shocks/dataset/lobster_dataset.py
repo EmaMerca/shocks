@@ -60,9 +60,7 @@ LOBSTER_RESAMPLE_METHODS = {
 
 
 class LobsterDataset(BaseDataset):
-    def __init__(
-        self, name: str, columns: list = LOBSTER_RESAMPLE_METHODS.keys()
-    ):
+    def __init__(self, name: str, columns: list = LOBSTER_RESAMPLE_METHODS.keys()):
         super(LobsterDataset, self).__init__()
         self.cols = columns
         self.name = name
@@ -105,17 +103,3 @@ class LobsterDataset(BaseDataset):
         data["returns"] = data["price"].pct_change().dropna()
         data["log_returns"] = np.log(data["price"] / data["price"].shift(1)).dropna()
         return data.dropna()
-
-
-if __name__ == "__main__":
-    dataset = LobsterDataset("aapl")
-    data, shocks = dataset.build_dataset(
-        dir_path="/home/ema/dev/shocks/data/lobster/AAPL/",
-        start_date="2021-11-02",
-        end_date="2021-11-03",
-        freq="30s",
-        shocks_window=300,
-        fit_window=300,
-        std_from_mean=2
-    )
-    len(data)
