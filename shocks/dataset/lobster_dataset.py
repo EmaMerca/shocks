@@ -9,46 +9,46 @@ from shocks.dataset import BaseDataset
 
 LOBSTER_RESAMPLE_METHODS = {
     "date": "",
-    "psell1": "mean",
-    "vsell1": "sum",
-    "pbuy1": "mean",
-    "vbuy1": "sum",
-    "psell2": "mean",
-    "vsell2": "sum",
-    "pbuy2": "mean",
-    "vbuy2": "sum",
-    "psell3": "mean",
-    "vsell3": "sum",
-    "pbuy3": "mean",
-    "vbuy3": "sum",
-    "psell4": "mean",
-    "vsell4": "sum",
-    "pbuy4": "mean",
-    "vbuy4": "sum",
-    "psell5": "mean",
-    "vsell5": "sum",
-    "pbuy5": "mean",
-    "vbuy5": "sum",
-    "psell6": "mean",
-    "vsell6": "sum",
-    "pbuy6": "mean",
-    "vbuy6": "sum",
-    "psell7": "mean",
-    "vsell7": "sum",
-    "pbuy7": "mean",
-    "vbuy7": "sum",
-    "psell8": "mean",
-    "vsell8": "sum",
-    "pbuy8": "mean",
-    "vbuy8": "sum",
-    "psell9": "mean",
-    "vsell9": "sum",
-    "pbuy9": "mean",
-    "vbuy9": "sum",
-    "psell10": "mean",
-    "vsell10": "sum",
-    "pbuy10": "mean",
-    "vbuy10": "sum",
+    "psell1": "last",
+    "vsell1": "last",
+    "pbuy1": "last",
+    "vbuy1": "last",
+    "psell2": "last",
+    "vsell2": "last",
+    "pbuy2": "last",
+    "vbuy2": "last",
+    "psell3": "last",
+    "vsell3": "last",
+    "pbuy3": "last",
+    "vbuy3": "last",
+    "psell4": "last",
+    "vsell4": "last",
+    "pbuy4": "last",
+    "vbuy4": "last",
+    "psell5": "last",
+    "vsell5": "last",
+    "pbuy5": "last",
+    "vbuy5": "last",
+    "psell6": "last",
+    "vsell6": "last",
+    "pbuy6": "last",
+    "vbuy6": "last",
+    "psell7": "last",
+    "vsell7": "last",
+    "pbuy7": "last",
+    "vbuy7": "last",
+    "psell8": "last",
+    "vsell8": "last",
+    "pbuy8": "last",
+    "vbuy8": "last",
+    "psell9": "last",
+    "vsell9": "last",
+    "pbuy9": "last",
+    "vbuy9": "last",
+    "psell10": "last",
+    "vsell10": "last",
+    "pbuy10": "last",
+    "vbuy10": "last",
     "time": "",
     "event_type": "",
     "order_id": "",
@@ -69,7 +69,6 @@ class LobsterDataset(BaseDataset):
         df = pd.read_csv(fname, names=self.cols)
         # duplicated columns names
         if set(df.columns) == set(df.iloc[0].values):
-            a = 0
             df.drop(0, axis=0, inplace=True)
         df.index = pd.to_datetime(df["date"])
         df.drop(["date", "time", "event_type", "order_id", "unk"], axis=1, inplace=True)
@@ -78,7 +77,15 @@ class LobsterDataset(BaseDataset):
             for col in df.columns
             if col == "price" or "psell" in col or "pbuy" in col
         ]
+        volume_columns = [
+            col
+            for col in df.columns
+            if col == "size" or "vsell" in col or "vbuy" in col
+        ]
         df = df.apply(pd.to_numeric)
+        df[price_columns].fillna(method="ffill", inplace=True)
+        df["direction"].fillna(method="ffill", inplace=True)
+        df[volume_columns].fillna(value=0, inplace=True)
         df[price_columns] = df[price_columns].apply(lambda x: x / 10000)
         return df
 
