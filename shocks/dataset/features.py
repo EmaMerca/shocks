@@ -129,7 +129,6 @@ class Features:
         :return: featurized_shocks, featurized_non_shocks: dictionaries of features
         """
 
-        # (features, ticks)
         np_data = self.data.to_numpy().T
         times = self.data.index.tolist()
         starting_time = self.data.index[0]
@@ -138,51 +137,6 @@ class Features:
         price_col = self.columns.index("price")
         # [(feature, names)]
         features_to_compute = self.features_names()
-
-        featurized_shocks = self.compute_all_features(
-                indexes,
-                times,
-                np_data,
-                price_col,
-                feature_offsets,
-                pre_shock_offset,
-                features_to_compute,
-        )
-
-        featurized_shocks = []
-        for idx in shock_indexes:
-            shock_features = {
-                "time": times[idx],
-                "direction": self.direction(np_data, price_col, idx),
-            }
-            for func, name in features_to_compute:
-                for feature_offset in feature_offsets:
-                    features = self.compute_one_feature(
-                        np_data,
-                        func,
-                        idx - pre_shock_offset,
-                        feature_offset,
-                    )
-                    names = self.create_name(
-                        func,
-                        name,
-                        feature_offset,
-                    )
-                    # merge dictionaries
-                    shock_features = shock_features | dict(zip(names, features))
-
-            featurized_shocks.append(shock_features)
-
-
-        featurized_shocks = self.compute_all_features(
-                indexes,
-                times,
-                np_data,
-                price_col,
-                feature_offsets,
-                pre_shock_offset,
-                features_to_compute,
-        )
 
         non_shocks_indexes = self.get_non_shocks_indexes(
             non_shocks_ratio,
@@ -193,29 +147,26 @@ class Features:
             post_shock_offset,
         )
 
-        featurized_non_shocks = []
-        for idx in non_shocks_indexes:
-            shock_features = {
-                "time": times[idx],
-                "direction": 0,
-            }
-            for func, name in features_to_compute:
-                for feature_offset in feature_offsets:
-                    features = self.compute_one_feature(
-                        np_data,
-                        func,
-                        idx - pre_shock_offset,
-                        feature_offset,
-                    )
-                    names = self.create_name(
-                        func,
-                        name,
-                        feature_offset,
-                    )
-                    # merge dictionaries
-                    shock_features = shock_features | dict(zip(names, features))
+        featurized_shocks = self.compute_all_features(
+            shock_indexes,
+            times,
+            np_data,
+            price_col,
+            feature_offsets,
+            pre_shock_offset,
+            features_to_compute,
+        )
 
-            featurized_non_shocks.append(shock_features)
+        featurized_non_shocks = self.compute_all_features(
+            non_shocks_indexes,
+            times,
+            np_data,
+            price_col,
+            feature_offsets,
+            pre_shock_offset,
+            features_to_compute,
+            is_shock=False,
+        )
 
         return featurized_shocks, featurized_non_shocks
 
@@ -228,13 +179,16 @@ class Features:
         feature_offsets,
         pre_shock_offset,
         features_to_compute,
+        is_shock=True,
     ):
 
         events = []
         for idx in indexes:
             event_features = {
                 "time": times[idx],
-                "direction": self.direction(np_data, price_col, idx),
+                "direction": 0
+                if not is_shock
+                else self.direction(np_data, price_col, idx),
             }
             for func, name in features_to_compute:
                 for feature_offset in feature_offsets:
@@ -283,9 +237,12 @@ class Features:
         return random.sample(non_shock_indexes, size)
 
     def features_names(self):
+        cols_no_direction = [col for col in self.columns if col != "direction"]
         return [
-            (self.mean_pct_change, self.columns),
-            (self.std_pct_change, self.columns),
+            (self.mean_pct_change, cols_no_direction),
+            (self.std_pct_change, cols_no_direction),
+            (self.mean, cols_no_direction),
+            (self.std, cols_no_direction),
             (
                 self.buy_orderbook_resiliency_5,
                 "",

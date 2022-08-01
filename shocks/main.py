@@ -9,9 +9,11 @@ if __name__ == "__main__":
         freq="30s",
         shocks_window=300,
         fit_window=300,
-        std_from_mean=2.5
+        std_from_mean=2.5,
     )
     len(shocks)
     features = Features(data, shocks)
-    f = features.compute(pre_shock_offset=5, post_shock_offset=5, feature_offsets=[5, 10])
+    f = features.compute(
+        pre_shock_offset=5, post_shock_offset=5, feature_offsets=[5, 10]
+    )
     len(f)
