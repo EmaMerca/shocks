@@ -1,6 +1,5 @@
 import numpy as np
-import pandas as pd
-from typing import List
+import random
 
 
 class Features:
@@ -76,12 +75,8 @@ class Features:
 
     def sell_orderbook_resiliency_10(self, x: np.array) -> np.array:
         """Total cost needed to move price by 5 ticks. Computed as sum over i of volume_i * price_i"""
-        vsell_cols = self.filter_columns(
-            lambda col: "vsell" in col and int(col[-1]) <= 5
-        )
-        psell_cols = self.filter_columns(
-            lambda col: "psell" in col and int(col[-1]) <= 5
-        )
+        vsell_cols = self.filter_columns(lambda col: "vsell" in col)
+        psell_cols = self.filter_columns(lambda col: "psell" in col)
         return np.sum(x[vsell_cols, :] * x[psell_cols, :], axis=1)
 
     def buy_orderbook_resiliency_10(self, x: np.array) -> np.array:
@@ -96,7 +91,7 @@ class Features:
         midpoint = (x[pbuy, :] + x[psell, :]) / 2
         return (x[psell, :] - x[pbuy, :]) / midpoint
 
-    def compute_one(
+    def compute_one_feature(
         self,
         data: np.array,
         feature: callable,
@@ -117,10 +112,11 @@ class Features:
 
     def compute(
         self,
-        pre_shock_offset: int,
-        post_shock_offset: int,
-        feature_offsets: List[int],
-    ):
+        pre_shock_offset: int = 5,
+        post_shock_offset: int = 5,
+        feature_offsets: list | tuple = (5, 10, 25, 50),
+        non_shocks_ratio: int = 50,
+    ) -> tuple:
         """Compute features for dataset
 
         :param cols: columns for which compute features
@@ -128,31 +124,43 @@ class Features:
         :param post_shock_offset: how many observations after shock has happened we want to skip before processing another shock.
                 E.g. if a shock happened at time t, we will skip all shocks between t + 1 and t + post_shock_offset
         :param feature_offsets: how many observations before shock_offset we want to compute the features
-        :return:
+        :param non_shocks_ratio: how many non_shocks event per shocks we want to have in the dataset. Defaults to 50.
+
+        :return: featurized_shocks, featurized_non_shocks: dictionaries of features
         """
-        featurized_shocks = []
 
         # (features, ticks)
         np_data = self.data.to_numpy().T
         times = self.data.index.tolist()
         starting_time = self.data.index[0]
         valid_shocks = [s for s in self.shocks if s["start"] > starting_time]
-
+        shock_indexes = [times.index(shock["start"]) for shock in valid_shocks]
         price_col = self.columns.index("price")
         # [(feature, names)]
         features_to_compute = self.features_names()
-        for shock in valid_shocks:
-            shock_idx = times.index(shock["start"])
+
+        featurized_shocks = self.compute_all_features(
+                indexes,
+                times,
+                np_data,
+                price_col,
+                feature_offsets,
+                pre_shock_offset,
+                features_to_compute,
+        )
+
+        featurized_shocks = []
+        for idx in shock_indexes:
             shock_features = {
-                "time": shock["start"],
-                "direction": self.direction(np_data, price_col, shock_idx),
+                "time": times[idx],
+                "direction": self.direction(np_data, price_col, idx),
             }
             for func, name in features_to_compute:
                 for feature_offset in feature_offsets:
-                    features = self.compute_one(
+                    features = self.compute_one_feature(
                         np_data,
                         func,
-                        shock_idx - pre_shock_offset,
+                        idx - pre_shock_offset,
                         feature_offset,
                     )
                     names = self.create_name(
@@ -165,7 +173,114 @@ class Features:
 
             featurized_shocks.append(shock_features)
 
-        return featurized_shocks
+
+        featurized_shocks = self.compute_all_features(
+                indexes,
+                times,
+                np_data,
+                price_col,
+                feature_offsets,
+                pre_shock_offset,
+                features_to_compute,
+        )
+
+        non_shocks_indexes = self.get_non_shocks_indexes(
+            non_shocks_ratio,
+            valid_shocks,
+            times,
+            feature_offsets,
+            pre_shock_offset,
+            post_shock_offset,
+        )
+
+        featurized_non_shocks = []
+        for idx in non_shocks_indexes:
+            shock_features = {
+                "time": times[idx],
+                "direction": 0,
+            }
+            for func, name in features_to_compute:
+                for feature_offset in feature_offsets:
+                    features = self.compute_one_feature(
+                        np_data,
+                        func,
+                        idx - pre_shock_offset,
+                        feature_offset,
+                    )
+                    names = self.create_name(
+                        func,
+                        name,
+                        feature_offset,
+                    )
+                    # merge dictionaries
+                    shock_features = shock_features | dict(zip(names, features))
+
+            featurized_non_shocks.append(shock_features)
+
+        return featurized_shocks, featurized_non_shocks
+
+    def compute_all_features(
+        self,
+        indexes,
+        times,
+        np_data,
+        price_col,
+        feature_offsets,
+        pre_shock_offset,
+        features_to_compute,
+    ):
+
+        events = []
+        for idx in indexes:
+            event_features = {
+                "time": times[idx],
+                "direction": self.direction(np_data, price_col, idx),
+            }
+            for func, name in features_to_compute:
+                for feature_offset in feature_offsets:
+                    features = self.compute_one_feature(
+                        np_data,
+                        func,
+                        idx - pre_shock_offset,
+                        feature_offset,
+                    )
+                    names = self.create_name(
+                        func,
+                        name,
+                        feature_offset,
+                    )
+                    # merge dictionaries
+                    event_features = event_features | dict(zip(names, features))
+
+            events.append(event_features)
+
+        return events
+
+    def get_non_shocks_indexes(
+        self,
+        non_shocks_ratio,
+        valid_shocks,
+        times,
+        feature_offsets,
+        pre_shock_offset,
+        post_shock_offset,
+    ):
+        shocks_indexes = [
+            i
+            for shock in valid_shocks
+            for i in range(
+                times.index(shock["start"]) - pre_shock_offset,
+                times.index(shock["start"]) + post_shock_offset,
+            )
+        ]
+        # the range is chosen so that we don't include nans
+        non_shock_indexes = [
+            s
+            for s in range(feature_offsets[-1] + post_shock_offset + 1, len(times))
+            if s not in shocks_indexes
+        ]
+        size = min(len(non_shock_indexes), non_shocks_ratio * len(self.shocks))
+        return random.sample(non_shock_indexes, size)
 
     def features_names(self):
         return [
