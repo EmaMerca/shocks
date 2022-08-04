@@ -43,4 +43,13 @@ poetry add numpy pandas ipykernel
 # add dependencies for libstable
 sudo apt install gsl-bin libgsl0-dev
 
+# add dependencies for tsfresh
+sudo apt-get update && sudo apt-get install -y \
+    build-essential \
+    libedit-dev  \
+    llvm-{version} \
+    llvm-{version}-dev
 
+LLVM_CONFIG=/usr/bin/llvm-config-{version}
+
+poetry add llvmlite

@@ -12,8 +12,8 @@ if __name__ == "__main__":
         std_from_mean=2.5,
     )
     len(shocks)
-    data["dt"] = data.index
-    ef = extract_features(data, column_id="dt")
+    # data["dt"] = data.index
+    # ef = extract_features(data, column_id="dt")
     features = Features(data, shocks)
     f = features.compute(
         pre_shock_offset=5, post_shock_offset=5, feature_offsets=[5, 10]
