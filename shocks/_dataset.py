@@ -50,6 +50,7 @@ COLUMNS = (
 
 
 class Dataset(object):
+
     def __init__(
         self,
         pair: str,
@@ -399,28 +400,3 @@ if __name__ == "__main__":
     data = Dataset(pair="AVAXBTC")
     data.preprocess(freq="5m")
     data.build_dataset(from_checkpoint=False)
-
-
-class LobsterReader:
-    def __init__(
-        self, fname: str, start_date: str = "2030-01-01", end_date: str = "1990-01-01"
-    ) -> None:
-        self.orderbook_cols = ["sell", "vsell", "buy", "vbuy"]
-        self.message_cols = [
-            "time",
-            "event_type",
-            "order_id",
-            "size",
-            "price",
-            "direction",
-            "unk",
-        ]
-
-    def merge_csv_from_zip(self, fname: str, start_date: str, end_date: str) -> None:
-        """
-        Merge all csv files from a zip file
-        """
-        with ZipFile(fname, "r") as zip_file:
-            zip_file.extractall(path=from_root("data", "raw"))
-        self.merge_csv(start_date, end_date)
-

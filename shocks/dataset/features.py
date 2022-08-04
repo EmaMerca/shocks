@@ -1,5 +1,6 @@
 import numpy as np
 import random
+from typing import Union
 
 
 class Features:
@@ -103,7 +104,9 @@ class Features:
         sliced_data = data[:, shock_idx - offset - 1 : shock_idx]
         return feature(sliced_data)
 
-    def create_name(self, feature: callable, cols: list | str, offset: int) -> list:
+    def create_name(
+        self, feature: callable, cols: Union[list, str], offset: int
+    ) -> list:
         """create name for feature. e.g. build_name(mean, ["alpha", "beta"], 5)
         returns ["alpha_5_mean", "beta_5_mean"]"""
         if not isinstance(cols, list):
@@ -114,7 +117,7 @@ class Features:
         self,
         pre_shock_offset: int = 5,
         post_shock_offset: int = 5,
-        feature_offsets: list | tuple = (5, 10, 25, 50),
+        feature_offsets: Union[list, tuple] = (5, 10, 25, 50),
         non_shocks_ratio: int = 50,
     ) -> tuple:
         """Compute features for dataset
