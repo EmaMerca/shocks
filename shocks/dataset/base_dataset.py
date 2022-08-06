@@ -168,6 +168,8 @@ class BaseDataset:
         fit_window: int = 250,
         std_from_mean: float = 3.0,
         max_workers: int = 8,
+        pre_shock_offset: int = 5,
+        post_shock_offset: int = 5,
     ):
         # load, fit and find shocks
         date_to_int = lambda x: int(x.split(".")[0].replace("-", ""))
@@ -198,7 +200,29 @@ class BaseDataset:
 
         data = pd.concat(fitted_dfs, axis=0)
         shocks = np.concatenate(shocks)
+        # maybe be useful in ts_fresh, don't need it now
+        # data["is_shock"] = BaseDataset.tag_shocks(
+        #     data, shocks, pre_shock_offset, post_shock_offset
+        # )
         return data, shocks
+
+    @staticmethod
+    def tag_shocks(data, shocks, pre_shock_offset, post_shock_offset):
+        # id = 1 for points near shocks, 0 otherwise
+        data["is_shock"] = [0] * len(data)
+        shocks_idxs = []
+        for shock_idx in [data.index.get_loc(s["start"]) for s in shocks]:
+            shocks_idxs.extend(
+                [
+                    data.index[i]
+                    for i in range(
+                        shock_idx - pre_shock_offset,
+                        shock_idx + post_shock_offset,
+                    )
+                ]
+            )
+
+        return [1 if el in shocks_idxs else 0 for el in data.index]
 
     def old_build_dataset(
         self,
@@ -208,7 +232,6 @@ class BaseDataset:
         max_workers=8,
         from_checkpoint=False,
     ):
-
 
         checkpoint_path = from_root("data", "checkpoints")
         if from_checkpoint:
@@ -249,6 +272,7 @@ class BaseDataset:
                     columns,
                 )
             )
+
         # avg pct change in alpha, beta, price, volume  at 5, 10, 50 observations before shock
         cols = [
             "alpha",

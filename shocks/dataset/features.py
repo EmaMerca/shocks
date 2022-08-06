@@ -1,10 +1,14 @@
 import numpy as np
 import random
 from typing import Union
+from tsfresh import extract_features
+import pandas as pd
+from scipy.stats import skew, kurtosis
 
 
 class Features:
     def __init__(self, fitted_data, shocks):
+        # needed for ts_fresh
         self.data = fitted_data
         self.columns = list(fitted_data.columns)
         self.shocks = shocks
@@ -16,16 +20,32 @@ class Features:
         """direction of the shock. 1 if shock causes price to increase, -1 otherwise"""
         return -1 if x[price_col, shock_idx - 1] >= x[price_col, shock_idx] else 1
 
-    def mean(self, x: np.array) -> np.array:
+    def mean(self, x: np.array, axis=1) -> np.array:
         # x is a matrix, mean is computed columns-wise.
         # Replace inf with nan and ignore nans in mean
         ma = np.ma.masked_array(x, ~np.isfinite(x)).filled(np.nan)
-        return np.nanmean(ma, axis=1)
+        return np.nanmean(ma, axis=axis)
 
-    def std(self, x: np.array) -> np.array:
+    def std(self, x: np.array, axis=1) -> np.array:
+        # x is a matrix, std is computed columns-wise. inf or nan values are ignored
+        ma = np.ma.masked_array(x, ~np.isfinite(x)).filled(np.nan)
+        return np.nanstd(ma, axis=axis)
+
+    def ob_mean(self, x: np.array) -> np.array:
+        # mean of different levels of orderbook at a given time
+        ma = np.ma.masked_array(x, ~np.isfinite(x)).filled(np.nan)
+        return np.nanmean(ma, axis=0)
+
+    def ob_std(self, x: np.array) -> np.array:
         # x is a matrix, std is computed columns-wise. inf or nan values are ignored
         ma = np.ma.masked_array(x, ~np.isfinite(x)).filled(np.nan)
         return np.nanstd(ma, axis=1)
+
+    def ob_skew(self, x: np.array) -> np.array:
+        return skew(x)
+
+    def ob_kurt(self, x: np.array) -> np.array:
+        return kurtosis(x)
 
     def pct_change(self, x: np.array) -> np.array:
         return np.diff(x) / x[:, :-1] * 100
@@ -39,58 +59,83 @@ class Features:
     def std_pct_change(self, x: np.array) -> np.array:
         return self.std(self.pct_change(x))
 
-    def vbuy_resiliency_5(self, x: np.array) -> np.array:
-        """Order book resiliency at 5 ticks as defined in
-        https://www.mds.deutsche-boerse.com/resource/blob/1334528/fdbd37665df6fa910df27172fc69c7ca/data/White-Paper-Risk-Alerts.pdf"""
-        cols = self.filter_columns(lambda col: "vbuy" in col and int(col[-1]) <= 5)
-        return np.sum(x[cols, :], axis=1)
+    def vbuy_cumsum_5(self, x: np.array) -> np.array:
+        cols = self.filter_columns(lambda col: col in [f"vbuy{i}" for i in range(1, 6)])
+        return np.sum(x[cols, :], axis=0)
 
-    def vsell_resiliency_5(self, x: np.array) -> np.array:
-        cols = self.filter_columns(lambda col: "vsell" in col and int(col[-1]) <= 5)
-        return np.sum(x[cols, :], axis=1)
+    def vsell_cumsum_5(self, x: np.array) -> np.array:
+        cols = self.filter_columns(
+            lambda col: col in [f"vsell{i}" for i in range(1, 6)]
+        )
+        return np.sum(x[cols, :], axis=0)
 
-    def vbuy_resiliency_10(self, x: np.array) -> np.array:
+    def vbuy_cumsum_10(self, x: np.array) -> np.array:
         """Order book resiliency at 10 ticks"""
         cols = self.filter_columns(lambda col: "vbuy" in col)
-        return np.sum(x[cols, :], axis=1)
+        return np.sum(x[cols, :], axis=0)
 
-    def vsell_resiliency_10(self, x: np.array) -> np.array:
+    def vsell_cumsum_10(self, x: np.array) -> np.array:
         cols = self.filter_columns(lambda col: "vsell" in col)
-        return np.sum(x[cols, :], axis=1)
+        return np.sum(x[cols, :], axis=0)
 
     def sell_orderbook_resiliency_5(self, x: np.array) -> np.array:
-        """Total cost needed to move price by 5 ticks. Computed as sum over i of volume_i * price_i"""
+        """Total cost needed to move price by 5 ticks. Computed as sum over i of volume_i * price_i
+        https://www.mds.deutsche-boerse.com/resource/blob/1334528/fdbd37665df6fa910df27172fc69c7ca/data/White-Paper-Risk-Alerts.pdf"""
         vsell_cols = self.filter_columns(
-            lambda col: "vsell" in col and int(col[-1]) <= 5
+            lambda col: col in [f"vsell{i}" for i in range(1, 6)]
         )
         psell_cols = self.filter_columns(
-            lambda col: "psell" in col and int(col[-1]) <= 5
+            lambda col: col in [f"psell{i}" for i in range(1, 6)]
         )
-        return np.sum(x[vsell_cols, :] * x[psell_cols, :], axis=1)
+        return np.sum(x[vsell_cols, :] * x[psell_cols, :], axis=0)
 
     def buy_orderbook_resiliency_5(self, x: np.array) -> np.array:
         """Total cost needed to move price by 5 ticks. Computed as sum over i of volume_i * price_i"""
-        vbuy_cols = self.filter_columns(lambda col: "vbuy" in col and int(col[-1]) <= 5)
-        pbuy_cols = self.filter_columns(lambda col: "pbuy" in col and int(col[-1]) <= 5)
-        return np.sum(x[vbuy_cols, :] * x[pbuy_cols, :], axis=1)
+        vbuy_cols = self.filter_columns(
+            lambda col: col in [f"vbuy{i}" for i in range(1, 6)]
+        )
+        pbuy_cols = self.filter_columns(
+            lambda col: col in [f"pbuy{i}" for i in range(1, 6)]
+        )
+        return np.sum(x[vbuy_cols, :] * x[pbuy_cols, :], axis=0)
 
     def sell_orderbook_resiliency_10(self, x: np.array) -> np.array:
         """Total cost needed to move price by 5 ticks. Computed as sum over i of volume_i * price_i"""
         vsell_cols = self.filter_columns(lambda col: "vsell" in col)
         psell_cols = self.filter_columns(lambda col: "psell" in col)
-        return np.sum(x[vsell_cols, :] * x[psell_cols, :], axis=1)
+        return np.sum(x[vsell_cols, :] * x[psell_cols, :], axis=0)
 
     def buy_orderbook_resiliency_10(self, x: np.array) -> np.array:
         """Total cost needed to move price by 5 ticks. Computed as sum over i of volume_i * price_i"""
         vbuy_cols = self.filter_columns(lambda col: "vbuy" in col)
         pbuy_cols = self.filter_columns(lambda col: "pbuy" in col)
-        return np.sum(x[vbuy_cols, :] * x[pbuy_cols, :], axis=1)
+        return np.sum(x[vbuy_cols, :] * x[pbuy_cols, :], axis=0)
 
     def quoted_spread(self, x: np.array) -> np.array:
         pbuy = self.columns.index("pbuy1")
         psell = self.columns.index("psell1")
         midpoint = (x[pbuy, :] + x[psell, :]) / 2
         return (x[psell, :] - x[pbuy, :]) / midpoint
+
+    def market_depth(self, x: np.array) -> np.array:
+        pbuy = self.columns.index("pbuy10")
+        psell = self.columns.index("psell10")
+        return x[psell, :] - x[pbuy, :]
+
+    def ts_fresh_features(self, x: np.array):
+        cols_idx = self.filter_columns(
+            lambda c: "buy" in c or "sell" in c or "dummy" in c
+        )
+        cols_name = [col for i, col in enumerate(self.columns) if i in cols_idx]
+
+        df = pd.DataFrame()
+        df["vbuy_cumsum_10"] = self.vbuy_cumsum_10(x)
+        df["sell_cumsum_10"] = self.vsell_cumsum_10(x)
+        df["dummy"] = [0] * len(df)
+
+        features = extract_features(df, column_id="dummy").T.dropna().to_dict()[0]
+
+        return features
 
     def compute_one_feature(
         self,
@@ -188,13 +233,16 @@ class Features:
         events = []
         for idx in indexes:
             event_features = {
-                "time": times[idx],
+                "time": str(times[idx]),
                 "direction": 0
                 if not is_shock
                 else self.direction(np_data, price_col, idx),
             }
             for func, name in features_to_compute:
                 for feature_offset in feature_offsets:
+                    # ts_fresh creates a lot of features and takes a lot of time, just use it for one of features_offset
+                    if name == "ts_fresh" and feature_offset != feature_offsets[-1]:
+                        continue
                     features = self.compute_one_feature(
                         np_data,
                         func,
@@ -206,7 +254,14 @@ class Features:
                         name,
                         feature_offset,
                     )
-                    # merge dictionaries
+                    # merge dictionaries. ts_fresh already returns {name: feature}
+                    if name == "ts_fresh":
+                        names = [
+                            f"ts_fresh_{feature_offset}_{key}"
+                            for key in features.keys()
+                        ]
+                        features = [val for val in features.values()]
+
                     event_features = event_features | dict(zip(names, features))
 
             events.append(event_features)
@@ -241,11 +296,18 @@ class Features:
 
     def features_names(self):
         cols_no_direction = [col for col in self.columns if col != "direction"]
+        cols_idx = self.filter_columns(lambda c: "buy" in c or "sell" in c)
+        orderbook_cols = [col for i, col in enumerate(self.columns) if i in cols_idx]
+
         return [
             (self.mean_pct_change, cols_no_direction),
             (self.std_pct_change, cols_no_direction),
             (self.mean, cols_no_direction),
             (self.std, cols_no_direction),
+            (self.ob_mean, orderbook_cols),
+            (self.ob_std, orderbook_cols),
+            (self.ob_kurt, orderbook_cols),
+            (self.ob_skew, orderbook_cols),
             (
                 self.buy_orderbook_resiliency_5,
                 "",
@@ -263,13 +325,15 @@ class Features:
                 "",
             ),
             (
-                self.vbuy_resiliency_5,
+                self.vbuy_cumsum_5,
                 "",
             ),
-            (self.vsell_resiliency_5, ""),
+            (self.vsell_cumsum_5, ""),
             (
-                self.vbuy_resiliency_10,
+                self.vbuy_cumsum_10,
                 "",
             ),
-            (self.vsell_resiliency_10, ""),
+            (self.vsell_cumsum_10, ""),
+            (self.market_depth, ""),
+            (self.ts_fresh_features, "ts_fresh"),
         ]
