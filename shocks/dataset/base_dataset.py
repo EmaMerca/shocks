@@ -178,7 +178,7 @@ class BaseDataset:
         files = [
             dir_path + file
             for file in os.listdir(dir_path)
-            if start_date <= date_to_int(file) <= end_date
+            if start_date <= date_to_int(file) < end_date
         ]
 
         fitted_dfs = []
