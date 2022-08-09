@@ -184,9 +184,13 @@ class BaseDataset:
         fitted_dfs = []
         shocks = []
         for file in files:
+            processed = self.preprocess(file, freq)
+            # if we have too few points numerical methods won't be stable and we'll end up with garbage data
+            if len(processed) < 100:
+                continue
             fitted = self.fit(
-                df=self.preprocess(file, freq),
-                window=fit_window,
+                df=processed,
+                window=min(len(processed), fit_window),
                 max_workers=max_workers,
             )
             fitted_dfs.append(fitted)

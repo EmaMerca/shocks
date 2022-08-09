@@ -1,29 +1,29 @@
 from shocks.dataset import *
-from tsfresh import extract_features
-from tsfresh import select_features
-from tsfresh.utilities.dataframe_functions import impute
 import json
 
 if __name__ == "__main__":
-
-    symbol = "aapl"
-    start_date="2021-11-02"
-    end_date = "2021-11-03"
+    symbol = "KO"
+    start_date = "2021-11-01"
+    end_date = "2022-01-01"
     freq = "30s"
-    dataset = LobsterDataset("aapl")
+    std_from_mean = 2
+
+    dataset = LobsterDataset(symbol)
     data, shocks = dataset.build_dataset(
-        dir_path="/home/ema/dev/shocks/data/lobster/AAPL/",
+        dir_path=f"/home/ema/dev/shocks/data/lobster/{symbol}/",
         start_date=start_date,
         end_date=end_date,
         freq=freq,
         shocks_window=300,
         fit_window=300,
-        std_from_mean=2.5,
+        std_from_mean=std_from_mean,
     )
     features = Features(data, shocks)
     f = features.compute(
-        pre_shock_offset=5, post_shock_offset=5, feature_offsets=[5, 10]
+        pre_shock_offset=5, post_shock_offset=5, feature_offsets=[5, 10, 50, 100]
     )
-
-    with open(f"features_{symbol}_{start_date}_{end_date}_{freq}.json", "w") as file:
+    with open(
+        f"/home/ema/dev/shocks/data/featurized/features__{symbol}__{start_date}_{end_date}__{freq}__{std_from_mean}_std.json",
+        "w",
+    ) as file:
         json.dump(f, file)

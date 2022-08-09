@@ -109,4 +109,5 @@ class LobsterDataset(BaseDataset):
         data["price"] = data["price"].ffill()
         data["returns"] = data["price"].pct_change().dropna()
         data["log_returns"] = np.log(data["price"] / data["price"].shift(1)).dropna()
+        data["moving_average"] = data["price"].rolling(25).mean()
         return data.dropna()

@@ -173,7 +173,7 @@ def from_folder_to_unique_df(file_7z: str,
     # frames = []
 
     # assert list(message_dfs.keys()) == list(orderbook_dfs.keys()), "the messages and orderbooks have different days!!"
-    files = [el for el in sorted(os.listdir(file_7z)) if "2021" not in el and "2022-01" not in el]
+    files = [el for el in sorted(os.listdir(file_7z))]
     # for d in message_dfs.keys():
     for file in files:
         date = file.split("_")[1]
@@ -188,7 +188,7 @@ def from_folder_to_unique_df(file_7z: str,
             print("processed", date)
             if len(tmp_df) > 0:
                 print("saving", date)
-                tmp_df.to_csv(f"/home/mercanti/shocks/data/AAPL_aggregated/{date}.csv")
+                tmp_df.to_csv(f"/home/ema/dev/shocks/data/lobster/KO/{date}.csv")
                 del tmp_df
                 gc.collect()
         except TypeError:
@@ -201,5 +201,5 @@ def from_folder_to_unique_df(file_7z: str,
 
 if __name__ == "__main__":
     print("Processing...")
-    df = from_folder_to_unique_df("/home/mercanti/shocks/data/lobster/AAPL/", first_date="2022-01-27", level=10)
+    df = from_folder_to_unique_df("/home/ema/dev/shocks/data/lobster/KO_raw/", first_date="2021-11-01", level=10)
     print("Done.")

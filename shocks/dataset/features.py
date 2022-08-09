@@ -16,9 +16,11 @@ class Features:
     def filter_columns(self, condition: callable):
         return [self.columns.index(col) for col in self.columns if condition(col)]
 
-    def direction(self, x: np.array, price_col: int, shock_idx: int) -> int:
+    def direction(self, x: np.array, shock_idx: int) -> int:
         """direction of the shock. 1 if shock causes price to increase, -1 otherwise"""
-        return -1 if x[price_col, shock_idx - 1] >= x[price_col, shock_idx] else 1
+        price_col = self.columns.index("price")
+        ma_col = self.columns.index("moving_average")
+        return 1 if x[price_col, shock_idx] >= x[ma_col, shock_idx] else -1
 
     def mean(self, x: np.array, axis=1) -> np.array:
         # x is a matrix, mean is computed columns-wise.
@@ -182,7 +184,6 @@ class Features:
         starting_time = self.data.index[0]
         valid_shocks = [s for s in self.shocks if s["start"] > starting_time]
         shock_indexes = [times.index(shock["start"]) for shock in valid_shocks]
-        price_col = self.columns.index("price")
         # [(feature, names)]
         features_to_compute = self.features_names()
 
@@ -195,21 +196,21 @@ class Features:
             post_shock_offset,
         )
 
+        print(f"Creating features for {len(shock_indexes)} shocks")
         featurized_shocks = self.compute_all_features(
             shock_indexes,
             times,
             np_data,
-            price_col,
             feature_offsets,
             pre_shock_offset,
             features_to_compute,
         )
 
+        print(f"Creating features for {len(non_shock_indexes)} non shocks")
         featurized_non_shocks = self.compute_all_features(
             non_shocks_indexes,
             times,
             np_data,
-            price_col,
             feature_offsets,
             pre_shock_offset,
             features_to_compute,
@@ -223,7 +224,6 @@ class Features:
         indexes,
         times,
         np_data,
-        price_col,
         feature_offsets,
         pre_shock_offset,
         features_to_compute,
@@ -236,7 +236,7 @@ class Features:
                 "time": str(times[idx]),
                 "direction": 0
                 if not is_shock
-                else self.direction(np_data, price_col, idx),
+                else self.direction(np_data, idx),
             }
             for func, name in features_to_compute:
                 for feature_offset in feature_offsets:
@@ -335,5 +335,5 @@ class Features:
             ),
             (self.vsell_cumsum_10, ""),
             (self.market_depth, ""),
-            (self.ts_fresh_features, "ts_fresh"),
+           # (self.ts_fresh_features, "ts_fresh"),
         ]
