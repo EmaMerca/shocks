@@ -17,5 +17,3 @@ def from_root(*args):
 def handle_exception(e, logger):
     logger.exception(e)
     exit(1)
-
-def load_json(fpath):
