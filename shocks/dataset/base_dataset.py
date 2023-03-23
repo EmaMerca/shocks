@@ -175,32 +175,30 @@ class BaseDataset:
         date_to_int = lambda x: int(x.split(".")[0].replace("-", ""))
         start_date = int(start_date.replace("-", ""))
         end_date = int(end_date.replace("-", ""))
-        files = [
-            dir_path + file
-            for file in os.listdir(dir_path)
-            if start_date <= date_to_int(file) < end_date
-        ]
+        # files = [
+        #     dir_path + file
+        #     for file in os.listdir(dir_path)
+        #     if start_date <= date_to_int(file) < end_date
+        # ]
 
         fitted_dfs = []
         shocks = []
-        for file in files:
-            processed = self.preprocess(file, freq)
-            # if we have too few points numerical methods won't be stable and we'll end up with garbage data
-            if len(processed) < 100:
-                continue
-            fitted = self.fit(
-                df=processed,
-                window=min(len(processed), fit_window),
-                max_workers=max_workers,
+        #for file in files:
+
+        processed = self.preprocess(dir_path, freq)
+        fitted = self.fit(
+            df=processed,
+            window=min(len(processed), fit_window),
+            max_workers=max_workers,
+        )
+        fitted_dfs.append(fitted)
+        for start in range(0, len(fitted) - shocks_window, shocks_window):
+            filtered = BaseDataset.filter_data(
+                fitted, fitted.index[start], fitted.index[start + shocks_window]
             )
-            fitted_dfs.append(fitted)
-            for start in range(0, len(fitted) - shocks_window, shocks_window):
-                filtered = BaseDataset.filter_data(
-                    fitted, fitted.index[start], fitted.index[start + shocks_window]
-                )
-                shocks.append(
-                    BaseDataset.find_shocks(filtered, std_from_mean=std_from_mean)
-                )
+            shocks.append(
+                BaseDataset.find_shocks(filtered, std_from_mean=std_from_mean)
+            )
 
         data = pd.concat(fitted_dfs, axis=0)
         shocks = np.concatenate(shocks)

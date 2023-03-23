@@ -1,7 +1,7 @@
 import numpy as np
 import random
 from typing import Union
-from tsfresh import extract_features
+# from tsfresh import extract_features
 import pandas as pd
 from scipy.stats import skew, kurtosis
 
@@ -206,7 +206,7 @@ class Features:
             features_to_compute,
         )
 
-        print(f"Creating features for {len(non_shock_indexes)} non shocks")
+        print(f"Creating features for {len(non_shocks_indexes)} non shocks")
         featurized_non_shocks = self.compute_all_features(
             non_shocks_indexes,
             times,
